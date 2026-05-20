@@ -1,0 +1,68 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+
+###  All files ignored ###
+
+src/main/java/com/ctbe/eventflow/config
+src/main/java/com/ctbe/eventflow/controller
+src/main/java/com/ctbe/eventflow/dto
+src/main/java/com/ctbe/eventflow/exception
+src/main/java/com/ctbe/eventflow/mapper
+src/main/java/com/ctbe/eventflow/model
+src/main/java/com/ctbe/eventflow/repository
+src/main/java/com/ctbe/eventflow/security
+src/main/java/com/ctbe/eventflow/service
+src/main/java/com/ctbe/eventflow/test
+
+src/main/resources/db/migration
+src/main/resources/static
+src/main/resources/templates
+
+
+##test files
+src/test/java/com/ctbe/eventflow/controller
+src/test/java/com/ctbe/eventflow/repository
+src/test/java/com/ctbe/eventflow/security
+src/test/java/com/ctbe/eventflow/service
+src/test/java/com/ctbe/eventflow/TestcontainersConfiguration.java
+
+
+
+/target
+docker-compose.yml
+Dockerfile
+
+
+
