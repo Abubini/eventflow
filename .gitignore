@@ -46,9 +46,9 @@ src/main/java/com/ctbe/eventflow/security
 src/main/java/com/ctbe/eventflow/service
 src/main/java/com/ctbe/eventflow/test
 
-src/main/resources/db/migration
-src/main/resources/static
-src/main/resources/templates
+#src/main/resources/db/migration
+#src/main/resources/static
+#src/main/resources/templates
 
 
 ##test files
