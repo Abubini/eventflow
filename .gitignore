@@ -36,7 +36,7 @@ build/
 ###  All files ignored ###
 
 src/main/java/com/ctbe/eventflow/config
-src/main/java/com/ctbe/eventflow/controller
+#src/main/java/com/ctbe/eventflow/controller
 src/main/java/com/ctbe/eventflow/dto
 src/main/java/com/ctbe/eventflow/exception
 src/main/java/com/ctbe/eventflow/mapper
