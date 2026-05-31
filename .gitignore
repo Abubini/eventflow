@@ -57,6 +57,7 @@ src/test/java/com/ctbe/eventflow/controller
 src/test/java/com/ctbe/eventflow/security
 src/test/java/com/ctbe/eventflow/service
 src/test/java/com/ctbe/eventflow/TestcontainersConfiguration.java
+src/test/java/com/ctbe/eventflow/mapper
 
 
 
