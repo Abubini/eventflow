@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: eventflow-db
+    environment:
+      POSTGRES_DB: eventflow
+      POSTGRES_USER: eventflow
+      POSTGRES_PASSWORD: eventflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eventflow-net
+
+  app:
+    build: .
+    container_name: eventflow-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/eventflow
+      DB_USER: eventflow
+      DB_PASS: eventflow
+      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      JWT_EXPIRATION_MS: 86400000
+      SPRING_PROFILES_ACTIVE: default
+    ports:
+      - "8080:8080"
+    networks:
+      - eventflow-net
+
+volumes:
+  pgdata:
+
+networks:
+  eventflow-net:
+    driver: bridge
