@@ -35,16 +35,16 @@ build/
 
 ###  All files ignored ###
 
-src/main/java/com/ctbe/eventflow/config
+#src/main/java/com/ctbe/eventflow/config
 #src/main/java/com/ctbe/eventflow/controller
 #src/main/java/com/ctbe/eventflow/dto
-src/main/java/com/ctbe/eventflow/exception
+#src/main/java/com/ctbe/eventflow/exception
 #src/main/java/com/ctbe/eventflow/mapper
 #src/main/java/com/ctbe/eventflow/model
 #src/main/java/com/ctbe/eventflow/repository
-src/main/java/com/ctbe/eventflow/security
+#src/main/java/com/ctbe/eventflow/security
 #src/main/java/com/ctbe/eventflow/service
-src/main/java/com/ctbe/eventflow/test
+#src/main/java/com/ctbe/eventflow/test
 
 #src/main/resources/db/migration
 #src/main/resources/static
