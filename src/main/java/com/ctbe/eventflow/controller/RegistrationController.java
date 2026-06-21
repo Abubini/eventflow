@@ -1,5 +1,6 @@
 package com.ctbe.eventflow.controller;
 
+import com.ctbe.eventflow.dto.request.BookingRequest;
 import com.ctbe.eventflow.dto.request.ScanRequest;
 import com.ctbe.eventflow.dto.response.*;
 import com.ctbe.eventflow.service.RegistrationService;
@@ -9,6 +10,8 @@ import org.springframework.data.domain.*;
 import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -20,9 +23,12 @@ public class RegistrationController {
 
     @PostMapping("/api/events/{eventId}/register")
     @PreAuthorize("hasRole('ATTENDEE')")
-    public ResponseEntity<RegistrationDTO> register(@PathVariable Long eventId) {
+    public ResponseEntity<RegistrationDTO> register(
+            @PathVariable Long eventId,
+            @Valid @RequestBody(required = false) BookingRequest req) {
+        if (req == null) req = new BookingRequest(); // default: 1 attendee
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(registrationService.register(eventId));
+                .body(registrationService.register(eventId, req));
     }
 
     // ── Cancel registration ───────────────────────────────────
@@ -44,7 +50,7 @@ public class RegistrationController {
     @GetMapping("/api/users/me/registrations")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Page<RegistrationDTO>> getMyRegistrations(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(
                 registrationService.getMyRegistrations(PageRequest.of(page, Math.min(size, 100))));
@@ -91,9 +97,41 @@ public class RegistrationController {
     @PreAuthorize("hasRole('ORGANIZER') or hasRole('STAFF')")
     public ResponseEntity<Page<UserDTO>> getAttendees(
             @PathVariable Long eventId,
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(
                 registrationService.getAttendees(eventId, PageRequest.of(page, Math.min(size, 100))));
+    }
+
+    // ── Waitlist: join ────────────────────────────────────────
+
+    /**
+     * Join the waitlist for a full event.
+     * The user will receive an email when a slot opens.
+     *
+     * POST /api/events/{eventId}/waitlist
+     */
+    @PostMapping("/api/events/{eventId}/waitlist")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<WaitlistDTO> joinWaitlist(@PathVariable Long eventId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(registrationService.joinWaitlist(eventId));
+    }
+
+    // ── Waitlist: leave ───────────────────────────────────────
+
+    @DeleteMapping("/api/events/{eventId}/waitlist")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> leaveWaitlist(@PathVariable Long eventId) {
+        registrationService.leaveWaitlist(eventId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ── My waitlist entries ───────────────────────────────────
+
+    @GetMapping("/api/users/me/waitlist")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<WaitlistDTO>> getMyWaitlistEntries() {
+        return ResponseEntity.ok(registrationService.getMyWaitlistEntries());
     }
 }

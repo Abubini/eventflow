@@ -20,4 +20,5 @@ public class RegistrationDTO {
     private UUID ticketCode;
     private boolean scanned;
     private LocalDateTime scannedAt;
+    private int attendeeCount;
 }

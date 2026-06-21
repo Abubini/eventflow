@@ -2,7 +2,9 @@ package com.ctbe.eventflow.mapper;
 
 import com.ctbe.eventflow.dto.response.RegistrationDTO;
 import com.ctbe.eventflow.dto.response.TicketDTO;
+import com.ctbe.eventflow.dto.response.WaitlistDTO;
 import com.ctbe.eventflow.model.Registration;
+import com.ctbe.eventflow.model.WaitlistEntry;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -39,6 +41,17 @@ public class RegistrationMapper {
                 .scanned(r.isScanned())
                 .scannedAt(r.getScannedAt())
                 .qrCodeBase64(qrCodeBase64)
+                .build();
+    }
+    public WaitlistDTO toWaitlistDTO(WaitlistEntry w) {
+        return WaitlistDTO.builder()
+                .id(w.getId())
+                .eventId(w.getEvent().getId())
+                .eventTitle(w.getEvent().getTitle())
+                .userId(w.getUser().getId())
+                .userName(w.getUser().getName())
+                .createdAt(w.getCreatedAt())
+                .notified(w.isNotified())
                 .build();
     }
 }

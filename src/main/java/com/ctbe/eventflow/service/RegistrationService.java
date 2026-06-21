@@ -1,5 +1,6 @@
 package com.ctbe.eventflow.service;
 
+import com.ctbe.eventflow.dto.request.BookingRequest;
 import com.ctbe.eventflow.dto.request.ScanRequest;
 import com.ctbe.eventflow.dto.response.*;
 import com.ctbe.eventflow.exception.*;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -25,12 +27,15 @@ public class RegistrationService {
     private final RegistrationMapper registrationMapper;
     private final UserMapper userMapper;
     private final TicketQrService ticketQrService;
+    private final EmailService emailService;
+    private final WaitlistRepository waitlistRepository;
+
 
     // ── Register ──────────────────────────────────────────────
 
     @Transactional
-    public RegistrationDTO register(Long eventId) {
-        User user = currentUser();
+    public RegistrationDTO register(Long eventId, BookingRequest req) {
+        User  user  = currentUser();
         Event event = findEventOrThrow(eventId);
 
         if (event.getStatus() != EventStatus.PUBLISHED)
@@ -39,30 +44,54 @@ public class RegistrationService {
         if (registrationRepository.existsByUserIdAndEventId(user.getId(), eventId))
             throw new ConflictException("Already registered for this event");
 
+        int seats = req.getAttendeeCount();
+
         if (event.getCapacity() != null) {
-            long confirmed = registrationRepository.countByEventAndStatus(event, RegStatus.CONFIRMED);
-            if (confirmed >= event.getCapacity())
+            long used = registrationRepository
+                    .sumAttendeeCountByEventAndStatus(event, RegStatus.CONFIRMED);
+            long available = event.getCapacity() - used;
+            if (available <= 0)
                 throw new BadRequestException("Event is at full capacity");
+            if (seats > available)
+                throw new BadRequestException(
+                        "Only " + available + " seat(s) left. Please reduce your attendee count.");
         }
 
         Registration reg = Registration.builder()
                 .user(user)
                 .event(event)
                 .status(RegStatus.CONFIRMED)
+                .attendeeCount(seats)
                 .build();
 
-        return registrationMapper.toDTO(registrationRepository.save(reg));
+        Registration saved = registrationRepository.save(reg);
+        emailService.sendBookingConfirmation(saved);
+        return registrationMapper.toDTO(saved);
     }
 
-    // ── Cancel ────────────────────────────────────────────────
+    // ── Cancel / Release booking ──────────────────────────────
 
     @Transactional
     public void cancel(Long eventId) {
-        User user = currentUser();
+        User  user  = currentUser();
         Event event = findEventOrThrow(eventId);
-        Registration reg = registrationRepository.findByUserAndEvent(user, event)
+
+        // Must cancel before event starts
+        if (!LocalDateTime.now().isBefore(event.getDateTime()))
+            throw new BadRequestException(
+                    "Cannot cancel a booking after the event has started");
+
+        Registration reg = registrationRepository
+                .findByUserAndEvent(user, event)
                 .orElseThrow(() -> new ResourceNotFoundException("Registration not found"));
+
+        int releasedSeats = reg.getAttendeeCount();
         registrationRepository.delete(reg);
+
+        emailService.sendCancellationConfirmation(user, event, releasedSeats);
+
+        // Notify waiting users about freed slot(s)
+        notifyWaitlist(event, releasedSeats);
     }
 
     // ── My registrations (attendee) ───────────────────────────
@@ -196,5 +225,85 @@ public class RegistrationService {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
+
+
+    @Transactional
+    public WaitlistDTO joinWaitlist(Long eventId) {
+        User  user  = currentUser();
+        Event event = findEventOrThrow(eventId);
+
+        if (event.getStatus() != EventStatus.PUBLISHED)
+            throw new BadRequestException("Cannot join waitlist for an event that is not published");
+
+        if (registrationRepository.existsByUserIdAndEventId(user.getId(), eventId))
+            throw new ConflictException("You are already registered for this event");
+
+        if (waitlistRepository.existsByUserIdAndEventId(user.getId(), eventId))
+            throw new ConflictException("You are already on the waitlist for this event");
+
+        // Optionally check that the event IS actually full
+        if (event.getCapacity() != null) {
+            long used = registrationRepository
+                    .sumAttendeeCountByEventAndStatus(event, RegStatus.CONFIRMED);
+            if (used < event.getCapacity())
+                throw new BadRequestException(
+                        "There are still seats available — you can book directly");
+        }
+
+        WaitlistEntry entry = WaitlistEntry.builder()
+                .user(user)
+                .event(event)
+                .build();
+
+        WaitlistEntry saved = waitlistRepository.save(entry);
+        emailService.sendWaitlistConfirmation(user, event);
+        return registrationMapper.toWaitlistDTO(saved);
+    }
+
+    // ── Waitlist: leave ───────────────────────────────────────
+
+    @Transactional
+    public void leaveWaitlist(Long eventId) {
+        User  user  = currentUser();
+        Event event = findEventOrThrow(eventId);
+        WaitlistEntry entry = waitlistRepository.findByUserAndEvent(user, event)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "You are not on the waitlist for this event"));
+        waitlistRepository.delete(entry);
+    }
+
+    // ── Waitlist: my entries ──────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<WaitlistDTO> getMyWaitlistEntries() {
+        User user = currentUser();
+        // Reuse the event-level list filtered by user via repository
+        return waitlistRepository.findAll().stream()
+                .filter(w -> w.getUser().getId().equals(user.getId()))
+                .map(registrationMapper::toWaitlistDTO)
+                .toList();
+    }
+
+    // ── Internal: notify waitlist after slots open ────────────
+
+    /**
+     * Called whenever seats are freed (cancellation or capacity increase).
+     * Notifies only as many waitlist users as there are available seats,
+     * marks them as notified so they don't get duplicate emails.
+     */
+    public void notifyWaitlist(Event event, int releasedSeats) {
+        if (event.getCapacity() == null) return; // unlimited — no waitlist needed
+
+        List<WaitlistEntry> pending = waitlistRepository.findPendingByEvent(event);
+        if (pending.isEmpty()) return;
+
+        int toNotify = Math.min(releasedSeats, pending.size());
+        for (int i = 0; i < toNotify; i++) {
+            WaitlistEntry entry = pending.get(i);
+            entry.setNotified(true);
+            waitlistRepository.save(entry);
+            emailService.sendSlotAvailableNotification(entry.getUser(), event);
+        }
     }
 }

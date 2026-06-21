@@ -54,4 +54,8 @@ public class Registration {
             ticketCode = UUID.randomUUID();
         }
     }
+
+    @Column(name = "attendee_count", nullable = false)
+    @Builder.Default
+    private int attendeeCount = 1;
 }
