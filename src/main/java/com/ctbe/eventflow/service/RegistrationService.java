@@ -284,6 +284,40 @@ public class RegistrationService {
                 .map(registrationMapper::toWaitlistDTO)
                 .toList();
     }
+    // ── Admin register (staff only) ───────────────────────────
+
+    @Transactional
+    public RegistrationDTO adminRegister(Long eventId, Long userId, BookingRequest req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+        Event event = findEventOrThrow(eventId);
+
+        if (registrationRepository.existsByUserIdAndEventId(userId, eventId))
+            throw new ConflictException("User is already registered for this event");
+
+        int seats = req.getAttendeeCount();
+        if (event.getCapacity() != null) {
+            long used = registrationRepository
+                    .sumAttendeeCountByEventAndStatus(event, RegStatus.CONFIRMED);
+            long available = event.getCapacity() - used;
+            if (available <= 0)
+                throw new BadRequestException("Event is at full capacity");
+            if (seats > available)
+                throw new BadRequestException(
+                        "Only " + available + " seat(s) left.");
+        }
+
+        Registration reg = Registration.builder()
+                .user(user)
+                .event(event)
+                .status(RegStatus.CONFIRMED)
+                .attendeeCount(seats)
+                .build();
+
+        Registration saved = registrationRepository.save(reg);
+        emailService.sendBookingConfirmation(saved);
+        return registrationMapper.toDTO(saved);
+    }
 
     // ── Internal: notify waitlist after slots open ────────────
 

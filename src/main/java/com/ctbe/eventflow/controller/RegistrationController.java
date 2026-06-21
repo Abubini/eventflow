@@ -134,4 +134,23 @@ public class RegistrationController {
     public ResponseEntity<List<WaitlistDTO>> getMyWaitlistEntries() {
         return ResponseEntity.ok(registrationService.getMyWaitlistEntries());
     }
+
+    // ── Staff: register any user for any event ────────────────
+
+    /**
+     * POST /api/admin/events/{eventId}/register/{userId}
+     *
+     * Staff can manually register any user for any event,
+     * bypassing the ATTENDEE-role restriction.
+     */
+    @PostMapping("/api/admin/events/{eventId}/register/{userId}")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<RegistrationDTO> adminRegister(
+            @PathVariable Long eventId,
+            @PathVariable Long userId,
+            @Valid @RequestBody(required = false) BookingRequest req) {
+        if (req == null) req = new BookingRequest();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(registrationService.adminRegister(eventId, userId, req));
+    }
 }

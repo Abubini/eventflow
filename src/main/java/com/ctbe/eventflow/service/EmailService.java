@@ -1,6 +1,7 @@
 package com.ctbe.eventflow.service;
 
 import com.ctbe.eventflow.model.Event;
+import com.ctbe.eventflow.model.OrganizerRequest;
 import com.ctbe.eventflow.model.Registration;
 import com.ctbe.eventflow.model.User;
 import lombok.RequiredArgsConstructor;
@@ -187,6 +188,98 @@ public class EmailService {
                 event.getDateTime().format(FMT),
                 event.getLocation(),
                 baseUrl);
+
+        send(user.getEmail(), subject, body);
+    }
+
+    @Async
+    public void sendOrganizerRequestNotificationToStaff(
+            String staffEmail, String staffName,
+            OrganizerRequest req) {
+
+        String subject = "📋 New Organizer Request – " + req.getName();
+        String body = String.format("""
+                Hi %s,
+
+                A user has submitted a request to become an organizer:
+
+                  Name   : %s
+                  Email  : %s
+                  Phone  : %s
+                  Account: %s
+
+                Their message:
+                ─────────────
+                %s
+                ─────────────
+
+                Review and act on this request at:
+                  %s/admin/organizer-requests/%d
+
+                — EventFlow
+                """,
+                staffName,
+                req.getName(),
+                req.getEmail(),
+                req.getPhone(),
+                req.getUser().getEmail(),
+                req.getMessage(),
+                baseUrl,
+                req.getId());
+
+        send(staffEmail, subject, body);
+    }
+
+    // ── Organizer request approved ────────────────────────────
+
+    @Async
+    public void sendRequestApproved(User user, OrganizerRequest req) {
+        String subject = "🎉 Your organizer request has been approved!";
+        String body = String.format("""
+                Hi %s,
+
+                Great news — your request to become an organizer has been APPROVED.
+
+                You can now create and manage events on EventFlow.
+
+                Log in and get started:
+                  %s/events/create
+
+                %s
+
+                — EventFlow
+                """,
+                user.getName(),
+                baseUrl,
+                req.getReviewNote() != null && !req.getReviewNote().isBlank()
+                        ? "Note from staff:\n" + req.getReviewNote()
+                        : "");
+
+        send(user.getEmail(), subject, body);
+    }
+
+    // ── Organizer request declined ────────────────────────────
+
+    @Async
+    public void sendRequestDeclined(User user, OrganizerRequest req) {
+        String subject = "Your organizer request – update";
+        String body = String.format("""
+                Hi %s,
+
+                Thank you for your interest in becoming an organizer on EventFlow.
+
+                After review, your request has not been approved at this time.
+
+                %s
+
+                You're welcome to submit a new request in the future.
+
+                — EventFlow
+                """,
+                user.getName(),
+                req.getReviewNote() != null && !req.getReviewNote().isBlank()
+                        ? "Reason from staff:\n" + req.getReviewNote()
+                        : "No additional reason was provided.");
 
         send(user.getEmail(), subject, body);
     }
