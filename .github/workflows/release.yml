@@ -58,15 +58,15 @@ jobs:
           body: |
             ## Docker image
 
-```bash
-docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-```
-
-## Deploy
-
-```bash
-# On your server
-cd /opt/eventflow
-docker compose pull
-docker compose up -d --no-deps app
-```
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+            
+            ## Deploy
+            
+            ```bash
+            # On your server
+            cd /opt/eventflow
+            docker compose pull
+            docker compose up -d --no-deps app
+            ```
