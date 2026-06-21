@@ -22,11 +22,11 @@ public class RegistrationController {
     // ── Register for an event ─────────────────────────────────
 
     @PostMapping("/api/events/{eventId}/register")
-    @PreAuthorize("hasRole('ATTENDEE')")
+    @PreAuthorize("hasRole('ATTENDEE') or hasRole('ORGANIZER')")
     public ResponseEntity<RegistrationDTO> register(
             @PathVariable Long eventId,
             @Valid @RequestBody(required = false) BookingRequest req) {
-        if (req == null) req = new BookingRequest(); // default: 1 attendee
+        if (req == null) req = new BookingRequest();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(registrationService.register(eventId, req));
     }

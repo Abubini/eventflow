@@ -1,5 +1,6 @@
 package com.ctbe.eventflow.service;
 
+import com.ctbe.eventflow.dto.request.CreateEventForOrganizerRequest;
 import com.ctbe.eventflow.dto.request.CreateEventRequest;
 import com.ctbe.eventflow.dto.request.UpdateEventRequest;
 import com.ctbe.eventflow.dto.response.EventDTO;
@@ -60,6 +61,38 @@ public class EventService {
                 .status(req.getStatus() != null ? req.getStatus() : EventStatus.DRAFT)
                 .createdBy(organizer)
                 .build();
+        return eventMapper.toDTO(eventRepository.save(event));
+    }
+
+    // ── Create on behalf of an organizer (staff only) ─────────
+
+    /**
+     * Staff picks which organizer will own the event.
+     * The target user must have the ORGANIZER role.
+     */
+    @Transactional
+    public EventDTO createForOrganizer(CreateEventForOrganizerRequest req) {
+        // Resolve and validate the target organizer
+        User organizer = userRepository.findById(req.getOrganizerId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User not found: " + req.getOrganizerId()));
+
+        if (organizer.getRole() != UserRole.ORGANIZER)
+            throw new BadRequestException(
+                    "User " + req.getOrganizerId() +
+                            " is not an organizer (role: " + organizer.getRole() + "). " +
+                            "Only organizers can own events.");
+
+        Event event = Event.builder()
+                .title(req.getTitle())
+                .description(req.getDescription())
+                .location(req.getLocation())
+                .dateTime(req.getDateTime())
+                .capacity(req.getCapacity())
+                .status(req.getStatus() != null ? req.getStatus() : EventStatus.DRAFT)
+                .createdBy(organizer)        // ← owned by the chosen organizer, not the staff member
+                .build();
+
         return eventMapper.toDTO(eventRepository.save(event));
     }
 

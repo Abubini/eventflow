@@ -41,6 +41,13 @@ public class RegistrationService {
         if (event.getStatus() != EventStatus.PUBLISHED)
             throw new BadRequestException("Event is not open for registration");
 
+        // Organizers may register for other organizers' events, but NOT their own
+        if (user.getRole() == UserRole.ORGANIZER
+                && event.getCreatedBy().getId().equals(user.getId())) {
+            throw new BadRequestException(
+                    "You cannot register for your own event");
+        }
+
         if (registrationRepository.existsByUserIdAndEventId(user.getId(), eventId))
             throw new ConflictException("Already registered for this event");
 
@@ -54,7 +61,8 @@ public class RegistrationService {
                 throw new BadRequestException("Event is at full capacity");
             if (seats > available)
                 throw new BadRequestException(
-                        "Only " + available + " seat(s) left. Please reduce your attendee count.");
+                        "Only " + available + " seat(s) left. " +
+                                "Please reduce your attendee count.");
         }
 
         Registration reg = Registration.builder()
@@ -76,7 +84,6 @@ public class RegistrationService {
         User  user  = currentUser();
         Event event = findEventOrThrow(eventId);
 
-        // Must cancel before event starts
         if (!LocalDateTime.now().isBefore(event.getDateTime()))
             throw new BadRequestException(
                     "Cannot cancel a booking after the event has started");
@@ -89,12 +96,10 @@ public class RegistrationService {
         registrationRepository.delete(reg);
 
         emailService.sendCancellationConfirmation(user, event, releasedSeats);
-
-        // Notify waiting users about freed slot(s)
         notifyWaitlist(event, releasedSeats);
     }
 
-    // ── My registrations (attendee) ───────────────────────────
+    // ── My registrations ──────────────────────────────────────
 
     @Transactional(readOnly = true)
     public Page<RegistrationDTO> getMyRegistrations(Pageable pageable) {
@@ -202,14 +207,11 @@ public class RegistrationService {
 
     @Transactional(readOnly = true)
     public Page<UserDTO> getAttendees(Long eventId, Pageable pageable) {
-        Event event = findEventOrThrow(eventId);
-        User current = currentUser();
-
+        Event event   = findEventOrThrow(eventId);
+        User  current = currentUser();
         if (!event.getCreatedBy().getId().equals(current.getId())
-                && current.getRole() != UserRole.STAFF) {
+                && current.getRole() != UserRole.STAFF)
             throw new ForbiddenException("Access denied");
-        }
-
         return registrationRepository.findByEvent(event, pageable)
                 .map(r -> userMapper.toDTO(r.getUser()));
     }
@@ -228,13 +230,16 @@ public class RegistrationService {
     }
 
 
+    // ── Waitlist: join ────────────────────────────────────────
+
     @Transactional
     public WaitlistDTO joinWaitlist(Long eventId) {
         User  user  = currentUser();
         Event event = findEventOrThrow(eventId);
 
         if (event.getStatus() != EventStatus.PUBLISHED)
-            throw new BadRequestException("Cannot join waitlist for an event that is not published");
+            throw new BadRequestException(
+                    "Cannot join waitlist for an event that is not published");
 
         if (registrationRepository.existsByUserIdAndEventId(user.getId(), eventId))
             throw new ConflictException("You are already registered for this event");
@@ -242,7 +247,6 @@ public class RegistrationService {
         if (waitlistRepository.existsByUserIdAndEventId(user.getId(), eventId))
             throw new ConflictException("You are already on the waitlist for this event");
 
-        // Optionally check that the event IS actually full
         if (event.getCapacity() != null) {
             long used = registrationRepository
                     .sumAttendeeCountByEventAndStatus(event, RegStatus.CONFIRMED);
@@ -273,12 +277,11 @@ public class RegistrationService {
         waitlistRepository.delete(entry);
     }
 
-    // ── Waitlist: my entries ──────────────────────────────────
+    // ── My waitlist entries ───────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<WaitlistDTO> getMyWaitlistEntries() {
         User user = currentUser();
-        // Reuse the event-level list filtered by user via repository
         return waitlistRepository.findAll().stream()
                 .filter(w -> w.getUser().getId().equals(user.getId()))
                 .map(registrationMapper::toWaitlistDTO)
@@ -288,7 +291,7 @@ public class RegistrationService {
 
     @Transactional
     public RegistrationDTO adminRegister(Long eventId, Long userId, BookingRequest req) {
-        User user = userRepository.findById(userId)
+        User  user  = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
         Event event = findEventOrThrow(eventId);
 
@@ -303,8 +306,7 @@ public class RegistrationService {
             if (available <= 0)
                 throw new BadRequestException("Event is at full capacity");
             if (seats > available)
-                throw new BadRequestException(
-                        "Only " + available + " seat(s) left.");
+                throw new BadRequestException("Only " + available + " seat(s) left.");
         }
 
         Registration reg = Registration.builder()

@@ -1,9 +1,11 @@
 // src/test/java/com/ctbe/eventflow/service/EventServiceTest.java
 package com.ctbe.eventflow.service;
 
+import com.ctbe.eventflow.dto.request.CreateEventForOrganizerRequest;
 import com.ctbe.eventflow.dto.request.CreateEventRequest;
 import com.ctbe.eventflow.dto.request.UpdateEventRequest;
 import com.ctbe.eventflow.dto.response.EventDTO;
+import com.ctbe.eventflow.exception.BadRequestException;
 import com.ctbe.eventflow.exception.ForbiddenException;
 import com.ctbe.eventflow.exception.ResourceNotFoundException;
 import com.ctbe.eventflow.mapper.EventMapper;
@@ -284,5 +286,86 @@ class EventServiceTest {
         List<EventDTO> result = eventService.search(null, null, null, null, null);
 
         assertThat(result).hasSize(1);
+    }
+
+    // ── createForOrganizer ────────────────────────────────────
+
+    @Test
+    void createForOrganizer_validOrganizerId_createsEventOwnedByOrganizer() {
+        mockSecurityAs(staffUser);
+
+        CreateEventForOrganizerRequest req = new CreateEventForOrganizerRequest();
+        req.setOrganizerId(organizer.getId());
+        req.setTitle("Staff-Created Event");
+        req.setLocation("Addis Ababa");
+        req.setDateTime(LocalDateTime.now().plusDays(10));
+        req.setStatus(EventStatus.DRAFT);
+
+        when(userRepository.findById(organizer.getId())).thenReturn(Optional.of(organizer));
+        when(eventRepository.save(any(Event.class))).thenReturn(event);
+        when(eventMapper.toDTO(event)).thenReturn(eventDTO);
+
+        EventDTO result = eventService.createForOrganizer(req);
+
+        assertThat(result).isNotNull();
+        ArgumentCaptor<Event> captor = ArgumentCaptor.forClass(Event.class);
+        verify(eventRepository).save(captor.capture());
+        // The event must be owned by the organizer, not the staff member
+        assertThat(captor.getValue().getCreatedBy().getId()).isEqualTo(organizer.getId());
+    }
+
+    @Test
+    void createForOrganizer_targetUserIsAttendee_throwsBadRequest() {
+        mockSecurityAs(staffUser);
+        User attendeeUser = User.builder().id(9L).email("att@test.com")
+                .role(UserRole.ATTENDEE).build();
+
+        CreateEventForOrganizerRequest req = new CreateEventForOrganizerRequest();
+        req.setOrganizerId(9L);
+        req.setTitle("Event");
+        req.setLocation("Addis");
+        req.setDateTime(LocalDateTime.now().plusDays(5));
+
+        when(userRepository.findById(9L)).thenReturn(Optional.of(attendeeUser));
+
+        assertThatThrownBy(() -> eventService.createForOrganizer(req))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not an organizer");
+    }
+
+    @Test
+    void createForOrganizer_targetUserNotFound_throwsResourceNotFound() {
+        mockSecurityAs(staffUser);
+
+        CreateEventForOrganizerRequest req = new CreateEventForOrganizerRequest();
+        req.setOrganizerId(999L);
+        req.setTitle("Event");
+        req.setLocation("Addis");
+        req.setDateTime(LocalDateTime.now().plusDays(5));
+
+        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> eventService.createForOrganizer(req))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("999");
+    }
+
+    @Test
+    void createForOrganizer_targetUserIsStaff_throwsBadRequest() {
+        mockSecurityAs(staffUser);
+        User anotherStaff = User.builder().id(8L).email("staff2@test.com")
+                .role(UserRole.STAFF).build();
+
+        CreateEventForOrganizerRequest req = new CreateEventForOrganizerRequest();
+        req.setOrganizerId(8L);
+        req.setTitle("Event");
+        req.setLocation("Addis");
+        req.setDateTime(LocalDateTime.now().plusDays(5));
+
+        when(userRepository.findById(8L)).thenReturn(Optional.of(anotherStaff));
+
+        assertThatThrownBy(() -> eventService.createForOrganizer(req))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not an organizer");
     }
 }
