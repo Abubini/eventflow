@@ -46,7 +46,7 @@ jobs:
           SPRING_MAIL_USERNAME:       test@example.com
           SPRING_MAIL_PASSWORD:       dummy
           APP_MAIL_FROM:              test@example.com
-        run: ./mvnw verify -q
+        run: mvn verify -q
 
       - name: Upload test reports on failure
         if: failure()
