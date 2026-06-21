@@ -31,7 +31,24 @@ build/
 
 ### VS Code ###
 .vscode/
+# Maven
+!.mvn/wrapper/maven-wrapper.jar
 
+# IDE
+.idea/
+
+# Environment secrets — NEVER commit .env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
 
 ###  All files ignored ###
 

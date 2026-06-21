@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# IDE files
+.idea
+*.iml
+.vscode
+*.code-workspace
+
+# Maven build output (builder stage copies sources, not target)
+target/
+
+# Test reports
+**/surefire-reports
+**/jacoco
+
+# Docker files themselves
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local env files — never bake secrets into the image
+.env
+.env.*

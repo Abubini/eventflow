@@ -1,45 +1,68 @@
-version: '3.8'
-
 services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────
   db:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: eventflow-db
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: eventflow
-      POSTGRES_USER: eventflow
-      POSTGRES_PASSWORD: eventflow
-    ports:
-      - "5432:5432"
+      POSTGRES_DB:       ${POSTGRES_DB:-eventflow}
+      POSTGRES_USER:     ${POSTGRES_USER:-eventflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eventflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eventflow} -d ${POSTGRES_DB:-eventflow}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     networks:
       - eventflow-net
 
+  # ── Spring Boot App ────────────────────────────────────────
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: eventflow-app
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DB_URL: jdbc:postgresql://db:5432/eventflow
-      DB_USER: eventflow
-      DB_PASS: eventflow
-      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
-      JWT_EXPIRATION_MS: 86400000
-      SPRING_PROFILES_ACTIVE: default
+      # Database
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://db:5432/${POSTGRES_DB:-eventflow}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-eventflow}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # Flyway
+      SPRING_FLYWAY_ENABLED: "true"
+
+      # JWT
+      APP_JWT_SECRET:        ${JWT_SECRET}
+      APP_JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+
+      # Mail
+      SPRING_MAIL_HOST:                                ${MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT:                                ${MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME:                            ${MAIL_USERNAME}
+      SPRING_MAIL_PASSWORD:                            ${MAIL_PASSWORD}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:           "true"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "true"
+      APP_MAIL_FROM:                                   ${MAIL_USERNAME}
+      APP_BASE_URL:                                    ${BASE_URL:-http://localhost:8080}
+
+      # Spring profile
+      SPRING_PROFILES_ACTIVE: prod
+
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8080}:8080"
     networks:
       - eventflow-net
 
 volumes:
-  pgdata:
+  postgres_data:
 
 networks:
   eventflow-net:
