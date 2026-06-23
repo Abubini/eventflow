@@ -170,6 +170,21 @@ public class EventService {
                 .stream().map(eventMapper::toDTO).toList();
     }
 
+    // ── My events (organizer) ─────────────────────────────────
+
+    /**
+     * Returns all events created by the currently authenticated organizer,
+     * ordered by event date descending (upcoming first).
+     * STAFF can also call this to see events they created.
+     */
+    @Transactional(readOnly = true)
+    public Page<EventDTO> getMyEvents(Pageable pageable) {
+        User current = currentUser();
+        return eventRepository
+                .findByCreatedByOrderByDateTimeDesc(current, pageable)
+                .map(eventMapper::toDTO);
+    }
+
     // ── Helpers ───────────────────────────────────────────────
 
     private Event findOrThrow(Long id) {

@@ -104,4 +104,25 @@ public class EventController {
         eventService.delete(id);
         return ResponseEntity.noContent().build();
     }
+
+    // ── Organizer / Staff: list own events ────────────────────
+
+    /**
+     * GET /api/events/mine
+     *
+     * Returns a paginated list of events created by the currently
+     * authenticated user (organizer or staff), newest date first.
+     * Each event includes full details: status, capacity, registered count.
+     *
+     * Example: GET /api/events/mine?page=0&size=10
+     */
+    @GetMapping("/api/events/mine")
+    @PreAuthorize("hasRole('ORGANIZER') or hasRole('STAFF')")
+    public ResponseEntity<Page<EventDTO>> getMyEvents(
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(
+                eventService.getMyEvents(
+                        PageRequest.of(page, Math.min(size, 100))));
+    }
 }
