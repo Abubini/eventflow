@@ -7,9 +7,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Registration entity representing user registrations for events.
- */
 @Entity
 @Table(name = "registrations", uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "event_id"}))
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -31,20 +28,16 @@ public class Registration {
     @Column(name = "registered_at", nullable = false, updatable = false)
     private LocalDateTime registeredAt;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 50)
     private RegStatus status = RegStatus.CONFIRMED;
 
-    /** Unique ticket identifier — used as the QR code payload. */
     @Column(name = "ticket_code", nullable = false, unique = true, updatable = false)
     private UUID ticketCode;
 
-    /** True once an organizer has scanned this ticket at entry. */
     @Column(name = "scanned", nullable = false)
     @Builder.Default
     private boolean scanned = false;
 
-    /** When the ticket was scanned. */
     @Column(name = "scanned_at")
     private LocalDateTime scannedAt;
 

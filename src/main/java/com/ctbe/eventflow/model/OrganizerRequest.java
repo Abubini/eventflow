@@ -15,12 +15,10 @@ public class OrganizerRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** The attendee who submitted the request. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** Contact details filled in the form (may differ from the account). */
     @Column(nullable = false, length = 100)
     private String name;
 
@@ -33,17 +31,14 @@ public class OrganizerRequest {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 50)
     @Builder.Default
     private RequestStatus status = RequestStatus.PENDING;
 
-    /** Staff member who reviewed the request. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by")
     private User reviewedBy;
 
-    /** Optional note the staff member writes when approving / declining. */
     @Column(name = "review_note", columnDefinition = "TEXT")
     private String reviewNote;
 

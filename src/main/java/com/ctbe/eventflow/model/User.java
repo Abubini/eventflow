@@ -5,10 +5,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-/**
- * User entity representing registered users in the system.
- * Supports three roles: ORGANIZER, ATTENDEE, STAFF.
- */
+
 @Entity @Table(name="users")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class User {
@@ -16,9 +13,10 @@ public class User {
     @Column(nullable=false,length=100) private String name;
     @Column(nullable=false,unique=true,length=255) private String email;
     @Column(name="password_hash",nullable=false) private String passwordHash;
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+
+    @Column(nullable=false, length=50)
     private UserRole role = UserRole.ATTENDEE;
+
     @Column(nullable=false) private boolean active=true;
     @CreationTimestamp @Column(name="created_at",nullable=false,updatable=false) private LocalDateTime createdAt;
     @OneToMany(mappedBy="createdBy",cascade=CascadeType.ALL,fetch=FetchType.LAZY) @Builder.Default private List<Event> events=new ArrayList<>();

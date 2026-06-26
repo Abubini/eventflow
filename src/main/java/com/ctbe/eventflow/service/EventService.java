@@ -166,7 +166,7 @@ public class EventService {
     public List<EventDTO> search(String keyword, String location,
                                  EventStatus status,
                                  LocalDateTime from, LocalDateTime to) {
-        return eventRepository.search(keyword, location, status, from, to)
+        return eventRepository.search(keyword, location, status != null ? status.name() : null, from, to)
                 .stream().map(eventMapper::toDTO).toList();
     }
 
@@ -184,6 +184,7 @@ public class EventService {
                 .findByCreatedByOrderByDateTimeDesc(current, pageable)
                 .map(eventMapper::toDTO);
     }
+
 
     // ── Helpers ───────────────────────────────────────────────
 
