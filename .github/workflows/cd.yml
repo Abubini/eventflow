@@ -105,36 +105,20 @@ jobs:
           cache-to:   type=gha,mode=max
 
   # ── Job 3: Deploy to server via SSH ─────────────────────────
+  # ── Job 3: Deploy to Railway ─────────────────────────────────
   deploy:
-    name: Deploy to Production
+    name: Deploy to Railway
     runs-on: ubuntu-latest
-    needs: build-and-push   # only runs if image was pushed successfully
-    environment: production  # uses GitHub Environment secrets (optional gate)
+    needs: build-and-push
+    environment: production
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host:     ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key:      ${{ secrets.SSH_PRIVATE_KEY }}
-          port:     ${{ secrets.SSH_PORT || 22 }}
-          script: |
-            set -e
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            cd /opt/eventflow
-
-            # Pull the latest image
-            echo "${{ secrets.GHCR_TOKEN }}" | \
-              docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            docker pull ghcr.io/${{ github.repository }}:latest
-
-            # Zero-downtime restart: bring up new container before stopping old
-            docker compose pull
-            docker compose up -d --no-deps --remove-orphans app
-
-            # Clean up old dangling images to save disk space
-            docker image prune -f
-
-            echo "✅ Deployment complete"
+      - name: Install Railway CLI and deploy
+        run: |
+          npm install -g @railway/cli
+          railway up --service eventflow --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
