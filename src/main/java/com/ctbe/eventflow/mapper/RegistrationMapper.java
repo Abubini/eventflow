@@ -22,6 +22,7 @@ public class RegistrationMapper {
                 .ticketCode(r.getTicketCode())
                 .scanned(r.isScanned())
                 .scannedAt(r.getScannedAt())
+                .attendeeCount(r.getAttendeeCount())
                 .build();
     }
 
@@ -40,9 +41,11 @@ public class RegistrationMapper {
                 .status(r.getStatus())
                 .scanned(r.isScanned())
                 .scannedAt(r.getScannedAt())
+                .attendeeCount(r.getAttendeeCount())
                 .qrCodeBase64(qrCodeBase64)
                 .build();
     }
+
     public WaitlistDTO toWaitlistDTO(WaitlistEntry w) {
         return WaitlistDTO.builder()
                 .id(w.getId())

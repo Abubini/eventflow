@@ -37,4 +37,5 @@ public class TicketDTO {
      * Frontend can use as: <img src="data:image/png;base64,{qrCodeBase64}" />
      */
     private String qrCodeBase64;
+    private int attendeeCount;
 }

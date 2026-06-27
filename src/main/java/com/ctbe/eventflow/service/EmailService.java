@@ -4,27 +4,24 @@ import com.ctbe.eventflow.model.Event;
 import com.ctbe.eventflow.model.OrganizerRequest;
 import com.ctbe.eventflow.model.Registration;
 import com.ctbe.eventflow.model.User;
+import com.resend.Resend;
+import com.resend.core.exception.ResendException;
+import com.resend.services.emails.model.CreateEmailOptions;
+import com.resend.services.emails.model.CreateEmailResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
 
-/**
- * Sends transactional emails asynchronously so the HTTP response
- * is never delayed by SMTP latency.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailService {
 
-    private final JavaMailSender mailSender;
+    private final Resend resend;
 
     @Value("${app.mail.from}")
     private String fromAddress;
@@ -40,11 +37,10 @@ public class EmailService {
     @Async
     public void sendBookingConfirmation(Registration reg) {
         Event event = reg.getEvent();
-        User user  = reg.getUser();
-        int count  = reg.getAttendeeCount();
+        User  user  = reg.getUser();
 
         String subject = "Booking Confirmed – " + event.getTitle();
-        String body = String.format("""
+        String body = """
                 Hi %s,
 
                 Your booking is confirmed! Here are the details:
@@ -59,12 +55,12 @@ public class EmailService {
 
                 Enjoy the event!
                 — EventFlow
-                """,
+                """.formatted(
                 user.getName(),
                 event.getTitle(),
                 event.getDateTime().format(FMT),
                 event.getLocation(),
-                count,
+                reg.getAttendeeCount(),
                 baseUrl);
 
         send(user.getEmail(), subject, body);
@@ -75,21 +71,21 @@ public class EmailService {
     @Async
     public void sendCancellationConfirmation(User user, Event event, int attendeeCount) {
         String subject = "Booking Cancelled – " + event.getTitle();
-        String body = String.format("""
+        String body = """
                 Hi %s,
 
                 Your booking has been cancelled:
 
-                  Event   : %s
-                  Date    : %s
-                  Location: %s
+                  Event         : %s
+                  Date          : %s
+                  Location      : %s
                   Seats released: %d
 
                 If this was a mistake, you can re-book while slots are still available:
                   %s/events/%d
 
                 — EventFlow
-                """,
+                """.formatted(
                 user.getName(),
                 event.getTitle(),
                 event.getDateTime().format(FMT),
@@ -101,27 +97,27 @@ public class EmailService {
         send(user.getEmail(), subject, body);
     }
 
-    // ── Event rescheduled notification ────────────────────────
+    // ── Event rescheduled ─────────────────────────────────────
 
     @Async
     public void sendRescheduledNotification(User user, Event event, String oldDateTime) {
         String subject = "📅 Date Changed – " + event.getTitle();
-        String body = String.format("""
+        String body = """
                 Hi %s,
 
                 The date of an event you have booked has changed:
 
-                  Event       : %s
-                  Old date    : %s
-                  New date    : %s
-                  Location    : %s
+                  Event    : %s
+                  Old date : %s
+                  New date : %s
+                  Location : %s
 
                 Please update your calendar. If the new date doesn't work for you,
                 you can cancel your booking at:
                   %s/my-registrations
 
                 — EventFlow
-                """,
+                """.formatted(
                 user.getName(),
                 event.getTitle(),
                 oldDateTime,
@@ -132,12 +128,12 @@ public class EmailService {
         send(user.getEmail(), subject, body);
     }
 
-    // ── Slot available notification (waitlist) ────────────────
+    // ── Slot available (waitlist) ─────────────────────────────
 
     @Async
     public void sendSlotAvailableNotification(User user, Event event) {
         String subject = "🎟️ A slot just opened – " + event.getTitle();
-        String body = String.format("""
+        String body = """
                 Hi %s,
 
                 Great news! A slot has opened up in an event you were waiting for:
@@ -149,10 +145,8 @@ public class EmailService {
                 Book now before it fills up again:
                   %s/events/%d
 
-                This notification was sent only to you. Act fast!
-
                 — EventFlow
-                """,
+                """.formatted(
                 user.getName(),
                 event.getTitle(),
                 event.getDateTime().format(FMT),
@@ -168,7 +162,7 @@ public class EmailService {
     @Async
     public void sendWaitlistConfirmation(User user, Event event) {
         String subject = "You're on the waitlist – " + event.getTitle();
-        String body = String.format("""
+        String body = """
                 Hi %s,
 
                 You're on the waitlist for:
@@ -177,28 +171,26 @@ public class EmailService {
                   Date    : %s
                   Location: %s
 
-                We'll email you the moment a slot opens up. You can remove yourself
-                from the waitlist at any time at:
-                  %s/my-registrations
+                We'll email you the moment a slot opens up.
 
                 — EventFlow
-                """,
+                """.formatted(
                 user.getName(),
                 event.getTitle(),
                 event.getDateTime().format(FMT),
-                event.getLocation(),
-                baseUrl);
+                event.getLocation());
 
         send(user.getEmail(), subject, body);
     }
 
+    // ── Organizer request: notify staff ──────────────────────
+
     @Async
     public void sendOrganizerRequestNotificationToStaff(
-            String staffEmail, String staffName,
-            OrganizerRequest req) {
+            String staffEmail, String staffName, OrganizerRequest req) {
 
         String subject = "📋 New Organizer Request – " + req.getName();
-        String body = String.format("""
+        String body = """
                 Hi %s,
 
                 A user has submitted a request to become an organizer:
@@ -213,11 +205,11 @@ public class EmailService {
                 %s
                 ─────────────
 
-                Review and act on this request at:
+                Review it at:
                   %s/admin/organizer-requests/%d
 
                 — EventFlow
-                """,
+                """.formatted(
                 staffName,
                 req.getName(),
                 req.getEmail(),
@@ -235,25 +227,22 @@ public class EmailService {
     @Async
     public void sendRequestApproved(User user, OrganizerRequest req) {
         String subject = "🎉 Your organizer request has been approved!";
-        String body = String.format("""
+        String noteSection = (req.getReviewNote() != null && !req.getReviewNote().isBlank())
+                ? "Note from staff:\n" + req.getReviewNote()
+                : "";
+
+        String body = """
                 Hi %s,
 
-                Great news — your request to become an organizer has been APPROVED.
+                Your request to become an organizer has been APPROVED.
 
-                You can now create and manage events on EventFlow.
-
-                Log in and get started:
+                You can now create and manage events on EventFlow:
                   %s/events/create
 
                 %s
 
                 — EventFlow
-                """,
-                user.getName(),
-                baseUrl,
-                req.getReviewNote() != null && !req.getReviewNote().isBlank()
-                        ? "Note from staff:\n" + req.getReviewNote()
-                        : "");
+                """.formatted(user.getName(), baseUrl, noteSection);
 
         send(user.getEmail(), subject, body);
     }
@@ -263,41 +252,42 @@ public class EmailService {
     @Async
     public void sendRequestDeclined(User user, OrganizerRequest req) {
         String subject = "Your organizer request – update";
-        String body = String.format("""
+        String reason = (req.getReviewNote() != null && !req.getReviewNote().isBlank())
+                ? "Reason from staff:\n" + req.getReviewNote()
+                : "No additional reason was provided.";
+
+        String body = """
                 Hi %s,
 
-                Thank you for your interest in becoming an organizer on EventFlow.
-
-                After review, your request has not been approved at this time.
+                After review, your organizer request has not been approved at this time.
 
                 %s
 
                 You're welcome to submit a new request in the future.
 
                 — EventFlow
-                """,
-                user.getName(),
-                req.getReviewNote() != null && !req.getReviewNote().isBlank()
-                        ? "Reason from staff:\n" + req.getReviewNote()
-                        : "No additional reason was provided.");
+                """.formatted(user.getName(), reason);
 
         send(user.getEmail(), subject, body);
     }
 
-    // ── Internal helper ───────────────────────────────────────
+    // ── Internal sender ───────────────────────────────────────
 
-    private void send(String to, String subject, String body) {
+    private void send(String to, String subject, String text) {
         try {
-            SimpleMailMessage msg = new SimpleMailMessage();
-            msg.setFrom(fromAddress);
-            msg.setTo(to);
-            msg.setSubject(subject);
-            msg.setText(body);
-            mailSender.send(msg);
-            log.info("Email sent to {} – {}", to, subject);
-        } catch (MailException ex) {
-            // Log and swallow: email failure must never break a business transaction
-            log.error("Failed to send email to {} – {}: {}", to, subject, ex.getMessage());
+            CreateEmailOptions options = CreateEmailOptions.builder()
+                    .from(fromAddress)
+                    .to(to)
+                    .subject(subject)
+                    .text(text)
+                    .build();
+
+            CreateEmailResponse response = resend.emails().send(options);
+            log.info("Email sent to {} – {} (id: {})", to, subject, response.getId());
+
+        } catch (ResendException e) {
+            // Log and swallow — email failure must never break a business transaction
+            log.error("Failed to send email to {} – {}: {}", to, subject, e.getMessage());
         }
     }
 }
