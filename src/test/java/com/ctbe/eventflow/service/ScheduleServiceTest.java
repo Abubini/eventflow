@@ -1,4 +1,3 @@
-// src/test/java/com/ctbe/eventflow/service/ScheduleServiceTest.java
 package com.ctbe.eventflow.service;
 
 import com.ctbe.eventflow.dto.request.CreateScheduleRequest;
@@ -26,9 +25,9 @@ import static org.mockito.Mockito.*;
 class ScheduleServiceTest {
 
     @Mock ScheduleRepository scheduleRepository;
-    @Mock EventRepository eventRepository;
-    @Mock UserRepository userRepository;
-    @Mock ScheduleMapper scheduleMapper;
+    @Mock EventRepository    eventRepository;
+    @Mock UserRepository     userRepository;
+    @Mock ScheduleMapper     scheduleMapper;
 
     @InjectMocks ScheduleService scheduleService;
 
@@ -36,19 +35,19 @@ class ScheduleServiceTest {
     private User otherUser;
     private User staffUser;
     private Event event;
+    private final LocalDateTime BASE = LocalDateTime.now().plusDays(1);
 
     @BeforeEach
     void setUp() {
-        organizer = User.builder().id(1L).email("org@example.com").role(UserRole.ORGANIZER).build();
-        otherUser = User.builder().id(2L).email("other@example.com").role(UserRole.ORGANIZER).build();
-        staffUser = User.builder().id(3L).email("staff@example.com").role(UserRole.STAFF).build();
-        event = Event.builder().id(1L).title("Event").status(EventStatus.PUBLISHED).createdBy(organizer).build();
+        organizer = User.builder().id(1L).email("org@test.com").role(UserRole.ORGANIZER).build();
+        otherUser = User.builder().id(2L).email("other@test.com").role(UserRole.ORGANIZER).build();
+        staffUser = User.builder().id(3L).email("staff@test.com").role(UserRole.STAFF).build();
+        event     = Event.builder().id(1L).title("Conference").status(EventStatus.PUBLISHED)
+                .createdBy(organizer).dateTime(BASE).build();
     }
 
     @AfterEach
-    void tearDown() {
-        SecurityContextHolder.clearContext();
-    }
+    void tearDown() { SecurityContextHolder.clearContext(); }
 
     private void mockSecurityAs(User user) {
         Authentication auth = mock(Authentication.class);
@@ -59,23 +58,26 @@ class ScheduleServiceTest {
         lenient().when(userRepository.findByEmail(user.getEmail())).thenReturn(Optional.of(user));
     }
 
-    private CreateScheduleRequest validRequest() {
+    private CreateScheduleRequest makeReq(LocalDateTime start, LocalDateTime end) {
         CreateScheduleRequest req = new CreateScheduleRequest();
         req.setSessionTitle("Keynote");
-        req.setDescription("Opening talk");
-        req.setStartTime(LocalDateTime.now().plusDays(1));
-        req.setEndTime(LocalDateTime.now().plusDays(1).plusHours(2));
+        req.setDescription("Opening keynote");
+        req.setStartTime(start);
+        req.setEndTime(end);
         return req;
     }
 
-    // ── getSchedules ──────────────────────────────────────────
+    // ════════════════════════════════════════════════════
+    //  getSchedules
+    // ════════════════════════════════════════════════════
 
     @Test
-    void getSchedules_returnsListForEvent() {
-        Schedule schedule = Schedule.builder().id(1L).event(event).sessionTitle("Keynote").build();
+    void getSchedules_returnsAllForEvent() {
+        Schedule s = Schedule.builder().id(1L).event(event)
+                .sessionTitle("Keynote").startTime(BASE).endTime(BASE.plusHours(1)).build();
         ScheduleDTO dto = ScheduleDTO.builder().id(1L).sessionTitle("Keynote").build();
-        when(scheduleRepository.findByEventId(1L)).thenReturn(List.of(schedule));
-        when(scheduleMapper.toDTO(schedule)).thenReturn(dto);
+        when(scheduleRepository.findByEventId(1L)).thenReturn(List.of(s));
+        when(scheduleMapper.toDTO(s)).thenReturn(dto);
 
         List<ScheduleDTO> result = scheduleService.getSchedules(1L);
 
@@ -85,26 +87,48 @@ class ScheduleServiceTest {
 
     @Test
     void getSchedules_noSchedules_returnsEmptyList() {
-        when(scheduleRepository.findByEventId(99L)).thenReturn(List.of());
+        when(scheduleRepository.findByEventId(1L)).thenReturn(List.of());
 
-        List<ScheduleDTO> result = scheduleService.getSchedules(99L);
-
-        assertThat(result).isEmpty();
+        assertThat(scheduleService.getSchedules(1L)).isEmpty();
     }
 
-    // ── addSession ────────────────────────────────────────────
+    @Test
+    void getSchedules_multipleSchedules_allReturned() {
+        Schedule s1 = Schedule.builder().id(1L).event(event).sessionTitle("S1")
+                .startTime(BASE).endTime(BASE.plusHours(1)).build();
+        Schedule s2 = Schedule.builder().id(2L).event(event).sessionTitle("S2")
+                .startTime(BASE.plusHours(2)).endTime(BASE.plusHours(3)).build();
+        when(scheduleRepository.findByEventId(1L)).thenReturn(List.of(s1, s2));
+        when(scheduleMapper.toDTO(s1)).thenReturn(ScheduleDTO.builder().id(1L).build());
+        when(scheduleMapper.toDTO(s2)).thenReturn(ScheduleDTO.builder().id(2L).build());
+
+        assertThat(scheduleService.getSchedules(1L)).hasSize(2);
+    }
 
     @Test
-    void addSession_byOrganizer_savesSession() {
+    void getSchedules_unknownEventId_returnsEmpty() {
+        when(scheduleRepository.findByEventId(999L)).thenReturn(List.of());
+
+        assertThat(scheduleService.getSchedules(999L)).isEmpty();
+    }
+
+    // ════════════════════════════════════════════════════
+    //  addSession
+    // ════════════════════════════════════════════════════
+
+    @Test
+    void addSession_byOrganizer_savesAndReturnsDTO() {
         mockSecurityAs(organizer);
         when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
-        Schedule saved = Schedule.builder().id(5L).event(event).sessionTitle("Keynote").build();
+        Schedule saved = Schedule.builder().id(5L).event(event).sessionTitle("Keynote")
+                .startTime(BASE).endTime(BASE.plusHours(2)).build();
         when(scheduleRepository.save(any())).thenReturn(saved);
         when(scheduleMapper.toDTO(saved)).thenReturn(ScheduleDTO.builder().id(5L).sessionTitle("Keynote").build());
 
-        ScheduleDTO result = scheduleService.addSession(1L, validRequest());
+        ScheduleDTO result = scheduleService.addSession(1L, makeReq(BASE, BASE.plusHours(2)));
 
         assertThat(result.getId()).isEqualTo(5L);
+        assertThat(result.getSessionTitle()).isEqualTo("Keynote");
         verify(scheduleRepository).save(any(Schedule.class));
     }
 
@@ -112,21 +136,32 @@ class ScheduleServiceTest {
     void addSession_byStaff_succeeds() {
         mockSecurityAs(staffUser);
         when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
-        Schedule saved = Schedule.builder().id(6L).event(event).sessionTitle("Keynote").build();
+        Schedule saved = Schedule.builder().id(6L).event(event).sessionTitle("Keynote")
+                .startTime(BASE).endTime(BASE.plusHours(1)).build();
         when(scheduleRepository.save(any())).thenReturn(saved);
         when(scheduleMapper.toDTO(saved)).thenReturn(ScheduleDTO.builder().id(6L).build());
 
-        assertThatCode(() -> scheduleService.addSession(1L, validRequest())).doesNotThrowAnyException();
+        assertThatCode(() -> scheduleService.addSession(1L, makeReq(BASE, BASE.plusHours(1))))
+                .doesNotThrowAnyException();
     }
 
     @Test
-    void addSession_byOtherUser_throwsForbidden() {
+    void addSession_byOtherOrganizer_throwsForbidden() {
         mockSecurityAs(otherUser);
         when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
 
-        assertThatThrownBy(() -> scheduleService.addSession(1L, validRequest()))
+        assertThatThrownBy(() -> scheduleService.addSession(1L, makeReq(BASE, BASE.plusHours(1))))
                 .isInstanceOf(ForbiddenException.class)
                 .hasMessageContaining("organizer");
+    }
+
+    @Test
+    void addSession_byOtherOrganizer_neverSaves() {
+        mockSecurityAs(otherUser);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+
+        assertThatThrownBy(() -> scheduleService.addSession(1L, makeReq(BASE, BASE.plusHours(1))));
+        verify(scheduleRepository, never()).save(any());
     }
 
     @Test
@@ -134,12 +169,8 @@ class ScheduleServiceTest {
         mockSecurityAs(organizer);
         when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
 
-        CreateScheduleRequest req = new CreateScheduleRequest();
-        req.setSessionTitle("Bad Session");
-        req.setStartTime(LocalDateTime.now().plusDays(2));
-        req.setEndTime(LocalDateTime.now().plusDays(1)); // end before start
-
-        assertThatThrownBy(() -> scheduleService.addSession(1L, req))
+        assertThatThrownBy(() -> scheduleService.addSession(1L,
+                makeReq(BASE.plusHours(3), BASE.plusHours(1)))) // end before start
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("End time must be after start time");
     }
@@ -149,14 +180,23 @@ class ScheduleServiceTest {
         mockSecurityAs(organizer);
         when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
 
-        LocalDateTime time = LocalDateTime.now().plusDays(1);
-        CreateScheduleRequest req = new CreateScheduleRequest();
-        req.setSessionTitle("Zero Duration");
-        req.setStartTime(time);
-        req.setEndTime(time); // equal
-
-        assertThatThrownBy(() -> scheduleService.addSession(1L, req))
+        assertThatThrownBy(() -> scheduleService.addSession(1L, makeReq(BASE, BASE)))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void addSession_endTimeOneSecondAfterStart_succeeds() {
+        mockSecurityAs(organizer);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+        LocalDateTime start = BASE;
+        LocalDateTime end   = BASE.plusSeconds(1);
+        Schedule saved = Schedule.builder().id(7L).event(event).sessionTitle("Keynote")
+                .startTime(start).endTime(end).build();
+        when(scheduleRepository.save(any())).thenReturn(saved);
+        when(scheduleMapper.toDTO(saved)).thenReturn(ScheduleDTO.builder().id(7L).build());
+
+        assertThatCode(() -> scheduleService.addSession(1L, makeReq(start, end)))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -164,8 +204,56 @@ class ScheduleServiceTest {
         mockSecurityAs(organizer);
         when(eventRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> scheduleService.addSession(99L, validRequest()))
+        assertThatThrownBy(() -> scheduleService.addSession(99L, makeReq(BASE, BASE.plusHours(1))))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
+    }
+
+    @Test
+    void addSession_eventNotFound_neverSaves() {
+        mockSecurityAs(organizer);
+        when(eventRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> scheduleService.addSession(99L, makeReq(BASE, BASE.plusHours(1))));
+        verify(scheduleRepository, never()).save(any());
+    }
+
+    @Test
+    void addSession_savedWithCorrectFields() {
+        mockSecurityAs(organizer);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+        LocalDateTime start = BASE;
+        LocalDateTime end   = BASE.plusHours(2);
+        Schedule saved = Schedule.builder().id(8L).event(event).sessionTitle("Keynote")
+                .description("Opening keynote").startTime(start).endTime(end).build();
+        when(scheduleRepository.save(any())).thenReturn(saved);
+        when(scheduleMapper.toDTO(saved)).thenReturn(ScheduleDTO.builder().id(8L).build());
+
+        scheduleService.addSession(1L, makeReq(start, end));
+
+        ArgumentCaptor<Schedule> cap = ArgumentCaptor.forClass(Schedule.class);
+        verify(scheduleRepository).save(cap.capture());
+        assertThat(cap.getValue().getSessionTitle()).isEqualTo("Keynote");
+        assertThat(cap.getValue().getStartTime()).isEqualTo(start);
+        assertThat(cap.getValue().getEndTime()).isEqualTo(end);
+        assertThat(cap.getValue().getEvent().getId()).isEqualTo(1L);
+    }
+
+    @Test
+    void addSession_withNullDescription_savesNullDescription() {
+        mockSecurityAs(organizer);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(event));
+        CreateScheduleRequest req = makeReq(BASE, BASE.plusHours(1));
+        req.setDescription(null);
+        Schedule saved = Schedule.builder().id(9L).event(event).sessionTitle("Keynote")
+                .startTime(BASE).endTime(BASE.plusHours(1)).build();
+        when(scheduleRepository.save(any())).thenReturn(saved);
+        when(scheduleMapper.toDTO(saved)).thenReturn(ScheduleDTO.builder().id(9L).build());
+
+        assertThatCode(() -> scheduleService.addSession(1L, req)).doesNotThrowAnyException();
+
+        ArgumentCaptor<Schedule> cap = ArgumentCaptor.forClass(Schedule.class);
+        verify(scheduleRepository).save(cap.capture());
+        assertThat(cap.getValue().getDescription()).isNull();
     }
 }

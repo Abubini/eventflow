@@ -1,4 +1,3 @@
-// src/test/java/com/ctbe/eventflow/service/AuthServiceTest.java
 package com.ctbe.eventflow.service;
 
 import com.ctbe.eventflow.dto.request.LoginRequest;
@@ -7,22 +6,14 @@ import com.ctbe.eventflow.dto.response.TokenResponse;
 import com.ctbe.eventflow.dto.response.UserDTO;
 import com.ctbe.eventflow.exception.ConflictException;
 import com.ctbe.eventflow.mapper.UserMapper;
-import com.ctbe.eventflow.model.TokenBlacklist;
-import com.ctbe.eventflow.model.User;
-import com.ctbe.eventflow.model.UserRole;
-import com.ctbe.eventflow.repository.TokenBlacklistRepository;
-import com.ctbe.eventflow.repository.UserRepository;
+import com.ctbe.eventflow.model.*;
+import com.ctbe.eventflow.repository.*;
 import com.ctbe.eventflow.security.JwtUtils;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
+import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -35,64 +26,76 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-    @Mock UserRepository userRepository;
-    @Mock PasswordEncoder passwordEncoder;
-    @Mock AuthenticationManager authenticationManager;
-    @Mock JwtUtils jwtUtils;
-    @Mock TokenBlacklistRepository tokenBlacklistRepository;
-    @Mock UserMapper userMapper;
+    @Mock UserRepository            userRepository;
+    @Mock PasswordEncoder           passwordEncoder;
+    @Mock AuthenticationManager     authenticationManager;
+    @Mock JwtUtils                  jwtUtils;
+    @Mock TokenBlacklistRepository  tokenBlacklistRepository;
+    @Mock UserMapper                userMapper;
 
     @InjectMocks AuthService authService;
 
-    private RegisterRequest registerRequest;
     private User user;
     private UserDTO userDTO;
 
     @BeforeEach
     void setUp() {
-        registerRequest = new RegisterRequest();
-        registerRequest.setName("Alice");
-        registerRequest.setEmail("alice@example.com");
-        registerRequest.setPassword("password123");
-
-        user = User.builder()
-                .id(1L).name("Alice").email("alice@example.com")
-                .passwordHash("hashed").role(UserRole.ATTENDEE).active(true)
-                .build();
-
-        userDTO = UserDTO.builder()
-                .id(1L).name("Alice").email("alice@example.com")
-                .role(UserRole.ATTENDEE).active(true)
-                .build();
+        user = User.builder().id(1L).name("Alice").email("alice@test.com")
+                .passwordHash("$2a$hashed").role(UserRole.ATTENDEE).active(true).build();
+        userDTO = UserDTO.builder().id(1L).name("Alice").email("alice@test.com")
+                .role(UserRole.ATTENDEE).active(true).build();
     }
 
-    // ── register ──────────────────────────────────────────────
+    // ════════════════════════════════════════════════════
+    //  register
+    // ════════════════════════════════════════════════════
 
     @Test
-    void register_happyPath_returnsUserDTO() {
-        when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        when(passwordEncoder.encode("password123")).thenReturn("hashed");
+    void register_newEmail_savesAndReturnsDTO() {
+        when(userRepository.existsByEmail("alice@test.com")).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("$2a$hashed");
         when(userRepository.save(any())).thenReturn(user);
         when(userMapper.toDTO(user)).thenReturn(userDTO);
 
-        UserDTO result = authService.register(registerRequest);
+        UserDTO result = authService.register(makeRegisterRequest("Alice", "alice@test.com", "password123"));
 
-        assertThat(result.getEmail()).isEqualTo("alice@example.com");
+        assertThat(result.getEmail()).isEqualTo("alice@test.com");
         verify(userRepository).save(any(User.class));
     }
 
     @Test
-    void register_passwordIsEncoded() {
+    void register_duplicateEmail_throwsConflictException() {
+        when(userRepository.existsByEmail("alice@test.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.register(
+                makeRegisterRequest("Alice", "alice@test.com", "password123")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already registered");
+    }
+
+    @Test
+    void register_duplicateEmail_neverCallsSave() {
+        when(userRepository.existsByEmail("alice@test.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.register(
+                makeRegisterRequest("Alice", "alice@test.com", "password123")));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void register_passwordIsHashed() {
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        when(passwordEncoder.encode("password123")).thenReturn("hashed");
+        when(passwordEncoder.encode("mypassword")).thenReturn("$2a$hashed_pw");
         when(userRepository.save(any())).thenReturn(user);
         when(userMapper.toDTO(user)).thenReturn(userDTO);
 
-        authService.register(registerRequest);
+        authService.register(makeRegisterRequest("Alice", "alice@test.com", "mypassword"));
 
-        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(captor.capture());
-        assertThat(captor.getValue().getPasswordHash()).isEqualTo("hashed");
+        ArgumentCaptor<User> cap = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(cap.capture());
+        assertThat(cap.getValue().getPasswordHash()).isEqualTo("$2a$hashed_pw");
+        // raw password must NEVER be stored
+        assertThat(cap.getValue().getPasswordHash()).doesNotContain("mypassword");
     }
 
     @Test
@@ -102,78 +105,184 @@ class AuthServiceTest {
         when(userRepository.save(any())).thenReturn(user);
         when(userMapper.toDTO(user)).thenReturn(userDTO);
 
-        authService.register(registerRequest);
+        authService.register(makeRegisterRequest("Alice", "alice@test.com", "password123"));
 
-        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(captor.capture());
-        assertThat(captor.getValue().getRole()).isEqualTo(UserRole.ATTENDEE);
+        ArgumentCaptor<User> cap = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(cap.capture());
+        assertThat(cap.getValue().getRole()).isEqualTo(UserRole.ATTENDEE);
     }
 
     @Test
-    void register_duplicateEmail_throwsConflict() {
-        when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
+    void register_newUserIsActiveByDefault() {
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed");
+        when(userRepository.save(any())).thenReturn(user);
+        when(userMapper.toDTO(user)).thenReturn(userDTO);
 
-        assertThatThrownBy(() -> authService.register(registerRequest))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("already registered");
+        authService.register(makeRegisterRequest("Alice", "alice@test.com", "password123"));
+
+        ArgumentCaptor<User> cap = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(cap.capture());
+        assertThat(cap.getValue().isActive()).isTrue();
     }
 
     @Test
-    void register_duplicateEmail_doesNotSave() {
-        when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
+    void register_nameIsPreservedExactly() {
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed");
+        when(userRepository.save(any())).thenReturn(user);
+        when(userMapper.toDTO(user)).thenReturn(userDTO);
 
-        assertThatThrownBy(() -> authService.register(registerRequest));
-        verify(userRepository, never()).save(any());
+        authService.register(makeRegisterRequest("Alice Wonderland", "alice@test.com", "password123"));
+
+        ArgumentCaptor<User> cap = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(cap.capture());
+        assertThat(cap.getValue().getName()).isEqualTo("Alice Wonderland");
     }
 
-    // ── login ─────────────────────────────────────────────────
+    @Test
+    void register_emailCaseSensitivityChecked() {
+        when(userRepository.existsByEmail("Alice@Test.COM")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed");
+        when(userRepository.save(any())).thenReturn(user);
+        when(userMapper.toDTO(user)).thenReturn(userDTO);
+
+        assertThatCode(() -> authService.register(
+                makeRegisterRequest("Alice", "Alice@Test.COM", "password123")))
+                .doesNotThrowAnyException();
+        // the exact email string passed in should be checked
+        verify(userRepository).existsByEmail("Alice@Test.COM");
+    }
+
+    // ════════════════════════════════════════════════════
+    //  login
+    // ════════════════════════════════════════════════════
 
     @Test
-    void login_validCredentials_returnsTokenResponse() {
-        LoginRequest req = new LoginRequest();
-        req.setEmail("alice@example.com");
-        req.setPassword("password123");
-
-        when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(user));
-        when(jwtUtils.generateToken("alice@example.com")).thenReturn("jwt.token.here");
+    void login_correctCredentials_returnsTokenResponse() {
+        when(userRepository.findByEmail("alice@test.com")).thenReturn(Optional.of(user));
+        when(jwtUtils.generateToken("alice@test.com")).thenReturn("jwt.token");
         when(jwtUtils.getExpirationMs()).thenReturn(86400000L);
         when(userMapper.toDTO(user)).thenReturn(userDTO);
 
-        TokenResponse response = authService.login(req);
+        TokenResponse resp = authService.login(makeLoginRequest("alice@test.com", "password123"));
 
-        assertThat(response.getToken()).isEqualTo("jwt.token.here");
-        assertThat(response.getType()).isEqualTo("Bearer");
-        assertThat(response.getExpiresIn()).isEqualTo(86400000L);
-        assertThat(response.getUser().getEmail()).isEqualTo("alice@example.com");
+        assertThat(resp.getToken()).isEqualTo("jwt.token");
+        assertThat(resp.getType()).isEqualTo("Bearer");
+        assertThat(resp.getExpiresIn()).isEqualTo(86400000L);
+        assertThat(resp.getUser().getEmail()).isEqualTo("alice@test.com");
     }
 
     @Test
-    void login_badCredentials_throwsException() {
-        LoginRequest req = new LoginRequest();
-        req.setEmail("alice@example.com");
-        req.setPassword("wrongpassword");
-
+    void login_wrongPassword_throwsBadCredentialsException() {
         doThrow(new BadCredentialsException("Bad credentials"))
-                .when(authenticationManager)
-                .authenticate(any(UsernamePasswordAuthenticationToken.class));
+                .when(authenticationManager).authenticate(any());
 
-        assertThatThrownBy(() -> authService.login(req))
+        assertThatThrownBy(() -> authService.login(makeLoginRequest("alice@test.com", "wrong")))
                 .isInstanceOf(BadCredentialsException.class);
     }
 
-    // ── logout ────────────────────────────────────────────────
+    @Test
+    void login_wrongPassword_neverGeneratesToken() {
+        doThrow(new BadCredentialsException("Bad credentials"))
+                .when(authenticationManager).authenticate(any());
+
+        assertThatThrownBy(() -> authService.login(makeLoginRequest("alice@test.com", "wrong")));
+        verify(jwtUtils, never()).generateToken(any());
+    }
+
+    @Test
+    void login_unknownEmail_throwsBadCredentialsException() {
+        doThrow(new BadCredentialsException("User not found"))
+                .when(authenticationManager).authenticate(any());
+
+        assertThatThrownBy(() -> authService.login(makeLoginRequest("ghost@test.com", "pass")))
+                .isInstanceOf(BadCredentialsException.class);
+    }
+
+    @Test
+    void login_disabledAccount_throwsDisabledException() {
+        doThrow(new DisabledException("Account disabled"))
+                .when(authenticationManager).authenticate(any());
+
+        assertThatThrownBy(() -> authService.login(makeLoginRequest("alice@test.com", "password123")))
+                .isInstanceOf(DisabledException.class);
+    }
+
+    @Test
+    void login_tokenTypeIsBearer() {
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(jwtUtils.generateToken(anyString())).thenReturn("token");
+        when(jwtUtils.getExpirationMs()).thenReturn(86400000L);
+        when(userMapper.toDTO(user)).thenReturn(userDTO);
+
+        TokenResponse resp = authService.login(makeLoginRequest("alice@test.com", "password123"));
+        assertThat(resp.getType()).isEqualTo("Bearer");
+    }
+
+    @Test
+    void login_expiresInMatchesJwtUtils() {
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(user));
+        when(jwtUtils.generateToken(anyString())).thenReturn("token");
+        when(jwtUtils.getExpirationMs()).thenReturn(3600000L); // 1 hour
+        when(userMapper.toDTO(user)).thenReturn(userDTO);
+
+        TokenResponse resp = authService.login(makeLoginRequest("alice@test.com", "password123"));
+        assertThat(resp.getExpiresIn()).isEqualTo(3600000L);
+    }
+
+    // ════════════════════════════════════════════════════
+    //  logout
+    // ════════════════════════════════════════════════════
 
     @Test
     void logout_validToken_savesToBlacklist() {
-        String token = "some.jwt.token";
         LocalDateTime expiry = LocalDateTime.now().plusHours(24);
-        when(jwtUtils.getExpiryFromToken(token)).thenReturn(expiry);
+        when(jwtUtils.getExpiryFromToken("valid.jwt.token")).thenReturn(expiry);
 
-        authService.logout(token);
+        authService.logout("valid.jwt.token");
 
-        ArgumentCaptor<TokenBlacklist> captor = ArgumentCaptor.forClass(TokenBlacklist.class);
-        verify(tokenBlacklistRepository).save(captor.capture());
-        assertThat(captor.getValue().getToken()).isEqualTo(token);
-        assertThat(captor.getValue().getExpiresAt()).isEqualTo(expiry);
+        ArgumentCaptor<TokenBlacklist> cap = ArgumentCaptor.forClass(TokenBlacklist.class);
+        verify(tokenBlacklistRepository).save(cap.capture());
+        assertThat(cap.getValue().getToken()).isEqualTo("valid.jwt.token");
+        assertThat(cap.getValue().getExpiresAt()).isEqualTo(expiry);
+    }
+
+    @Test
+    void logout_tokenExpiryStoredCorrectly() {
+        LocalDateTime specificExpiry = LocalDateTime.of(2027, 1, 1, 12, 0, 0);
+        when(jwtUtils.getExpiryFromToken(anyString())).thenReturn(specificExpiry);
+
+        authService.logout("some.token");
+
+        ArgumentCaptor<TokenBlacklist> cap = ArgumentCaptor.forClass(TokenBlacklist.class);
+        verify(tokenBlacklistRepository).save(cap.capture());
+        assertThat(cap.getValue().getExpiresAt()).isEqualTo(specificExpiry);
+    }
+
+    @Test
+    void logout_alwaysCallsBlacklistSave() {
+        when(jwtUtils.getExpiryFromToken(any())).thenReturn(LocalDateTime.now().plusHours(1));
+
+        authService.logout("any.token");
+
+        verify(tokenBlacklistRepository, times(1)).save(any(TokenBlacklist.class));
+    }
+
+    // ── helpers ───────────────────────────────────────────────
+
+    private RegisterRequest makeRegisterRequest(String name, String email, String password) {
+        RegisterRequest req = new RegisterRequest();
+        req.setName(name);
+        req.setEmail(email);
+        req.setPassword(password);
+        return req;
+    }
+
+    private LoginRequest makeLoginRequest(String email, String password) {
+        LoginRequest req = new LoginRequest();
+        req.setEmail(email);
+        req.setPassword(password);
+        return req;
     }
 }
