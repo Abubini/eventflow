@@ -300,13 +300,7 @@ curl -X POST http://localhost:8080/api/auth/login \
   -d '{"email":"alice@example.com","password":"password123"}'
 # → copy the "token" from the response
 ```
-#### for admin/staff use this exact cridential
-```bash
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@eventflow.com","password":"admin123"}'
-# → copy the "token" from the response
-```
+
 
 ### 3. Create an event (as ORGANIZER)
 
